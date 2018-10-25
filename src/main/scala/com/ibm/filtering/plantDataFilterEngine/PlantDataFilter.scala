@@ -52,8 +52,17 @@ object PlantDataFilter {
     val conf = new SparkConf().setMaster("local[*]").setAppName("PlantDataFilterEngine") 
     
     val sc = new StreamingContext(conf, Seconds(config.getLong("window.timeStamp")))
-    val kafkaConf = Map( "metadata.broker.list" -> config.getString("KAFKA_BROKERS"), "zookeeper.connect" -> config.getString("zookeeper.conect"), "group.id" -> "condition monitoring", "zookeeper.connection.timeout.ms" -> "1000")
- // topic names which will be read
+   // val kafkaConf = Map( "metadata.broker.list" -> config.getString("KAFKA_BROKERS"), "zookeeper.connect" -> config.getString("zookeeper.conect"), "group.id" -> "condition monitoring", "zookeeper.connection.timeout.ms" -> "1000")
+ val kafkaConf = Map[String, Object](
+  "bootstrap.servers" -> config.getString("kafka.KAFKA_BROKERS"),
+  "key.deserializer" -> classOf[StringDeserializer],
+  "value.deserializer" -> classOf[StringDeserializer],
+  "group.id" -> "PlantDataFilterEngine",
+  "auto.offset.reset" -> "latest",
+  "enable.auto.commit" -> (false: java.lang.Boolean)
+  )
+
+   // topic names which will be read
     val topics = Array(config.getString("kafka.INPUT_TOPIC"))
 
     // create kafka direct stream object
@@ -103,7 +112,7 @@ object PlantDataFilter {
       val validated = filteredIn.where($"ITEM_QUALITY"==="GOOD" && $"ITEM_DATA_TYPE" isin opcDataTypes)
       val JSONMessage = validated.toJSON
       val ssc: StreamingContext = {
-      val sparkConf = new SparkConf().setAppName("spark-streaming-kafka-example").setMaster("local[2]")
+      val sparkConf = new SparkConf().setAppName("PlantDataFilter").setMaster("local[*]")
       new StreamingContext(sparkConf, Seconds(1))
       }
 
@@ -112,7 +121,7 @@ object PlantDataFilter {
         val kafkaProducer: Broadcast[MySparkKafkaProducer[Array[Byte], String]] = {
         val kafkaProducerConfig = {
         val p = new Properties()
-        p.setProperty("bootstrap.servers", "broker1:9092")
+        p.setProperty("bootstrap.servers", config.getString("kafka.bootstrap")
         p.setProperty("key.serializer", classOf[ByteArraySerializer].getName)
         p.setProperty("value.serializer", classOf[StringSerializer].getName)
         p
@@ -150,12 +159,12 @@ object Raw {
       val TAG_ID = StructField("TAG_ID", StringType , nullable = false)
       val PARAMETER = StructField("PARAMETER", StringType , nullable = false)
       val ITEM_VALUE = StructField("ITEM_VALUE", FloatType , nullable = false)
-      val ITEM_DATA_TYPE = StructField("ITEM_DATA_TYPE", StringType , nullable = false)
+      //val ITEM_DATA_TYPE = StructField("ITEM_DATA_TYPE", StringType , nullable = false)
       val ITEM_QUALITY = StructField("ITEM_QUALITY", StringType, nullable = false)
       val ITEM_TIMESTAMP = StructField("ITEM_TIMESTAMP", TimestampType , nullable = false)
 
 
-      val struct = StructType(Array(ITEM_ID, TAG_ID, PARAMETER, ITEM_VALUE, ITEM_DATA_TYPE,ITEM_QUALITY, ITEM_TIMESTAMP))
+      val struct = StructType(Array(ITEM_ID, TAG_ID, PARAMETER, ITEM_VALUE, ITEM_QUALITY, ITEM_TIMESTAMP))
     }
 
 class MySparkKafkaProducer[K, V](createProducer: () => KafkaProducer[K, V]) extends Serializable {
